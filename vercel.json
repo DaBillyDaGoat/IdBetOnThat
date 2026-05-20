@@ -3,19 +3,19 @@
   "crons": [
     {
       "path": "/api/cron/close-timed",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 8 * * *"
     },
     {
       "path": "/api/cron/finalize-payouts",
-      "schedule": "17 * * * *"
+      "schedule": "30 8 * * *"
     },
     {
       "path": "/api/cron/welch-flag",
-      "schedule": "23 7 * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/auto-void",
-      "schedule": "37 7 * * *"
+      "schedule": "30 9 * * *"
     }
   ]
 }
