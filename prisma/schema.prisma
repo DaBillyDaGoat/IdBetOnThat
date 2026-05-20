@@ -1,0 +1,244 @@
+// idbetonthat — Prisma schema
+// See PRD Section 4. Includes Auth.js v5 adapter tables alongside app models.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =====================
+// Auth.js adapter models
+// =====================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// =====================
+// App models
+// =====================
+
+model User {
+  id              String   @id @default(cuid())
+  email           String?  @unique
+  emailVerified   DateTime?
+  image           String?
+  displayName     String
+  username        String   @unique // for /u/:username profile URLs
+  venmoUsername   String?
+  isAdmin         Boolean  @default(false)
+  ageVerified     Boolean  @default(false) // 18+ checkbox at signup
+  isDeleted       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  // Denormalized reputation counters
+  winsCount       Int @default(0)
+  lossesCount     Int @default(0)
+  paidUpCount     Int @default(0)
+  welchedCount    Int @default(0)
+  wagersCreated   Int @default(0)
+  wagersGhosted   Int @default(0)
+  totalWonCents   Int @default(0)
+  totalLostCents  Int @default(0)
+
+  accounts        Account[]
+  sessions        Session[]
+  createdWagers   Wager[]       @relation("WagerCreator")
+  bets            Bet[]
+  payoutsOwed     Payout[]      @relation("PayoutFrom")
+  payoutsOwedToMe Payout[]      @relation("PayoutTo")
+  disputes        Dispute[]
+  joinRequests    JoinRequest[]
+  reportsFiled    Report[]      @relation("ReportReporter")
+}
+
+model Wager {
+  id                String      @id @default(cuid())
+  slug              String      @unique // short URL slug
+  creatorId         String
+  creator           User        @relation("WagerCreator", fields: [creatorId], references: [id])
+  question          String
+  description       String?
+  mode              WagerMode   @default(PARIMUTUEL)
+  equalSplitCents   Int?
+  closeType         CloseType
+  closeAt           DateTime?
+  endDate           DateTime?
+  accessMode        AccessMode  @default(OPEN)
+  isPublic          Boolean     @default(false)
+  anonymousBets     Boolean     @default(false)
+  status            WagerStatus @default(OPEN)
+
+  winningOutcomeId  String?
+  winningOutcome    Outcome?    @relation("WinningOutcome", fields: [winningOutcomeId], references: [id])
+  resolutionNote    String?
+
+  createdAt         DateTime    @default(now())
+  closedAt          DateTime?
+  resolvedAt        DateTime?
+
+  outcomes          Outcome[]   @relation("WagerOutcomes")
+  bets              Bet[]
+  payouts           Payout[]
+  disputes          Dispute[]
+  joinRequests      JoinRequest[]
+  reports           Report[]
+
+  @@index([status, closeAt])
+  @@index([creatorId])
+  @@index([isPublic, createdAt])
+}
+
+model Outcome {
+  id        String  @id @default(cuid())
+  wagerId   String
+  wager     Wager   @relation("WagerOutcomes", fields: [wagerId], references: [id], onDelete: Cascade)
+  label     String
+  order     Int
+
+  bets      Bet[]
+  wonWagers Wager[] @relation("WinningOutcome")
+
+  @@index([wagerId])
+}
+
+model Bet {
+  id                       String   @id @default(cuid())
+  wagerId                  String
+  wager                    Wager    @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id])
+  outcomeId                String
+  outcome                  Outcome  @relation(fields: [outcomeId], references: [id])
+  amountCents              Int      // minimum 100 ($1.00)
+  impliedOddsAtPlacement   Float
+  createdAt                DateTime @default(now())
+
+  @@index([wagerId])
+  @@index([userId])
+  @@index([outcomeId])
+}
+
+model Payout {
+  id                    String    @id @default(cuid())
+  wagerId               String
+  wager                 Wager     @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  fromUserId            String
+  fromUser              User      @relation("PayoutFrom", fields: [fromUserId], references: [id])
+  toUserId              String
+  toUser                User      @relation("PayoutTo", fields: [toUserId], references: [id])
+  amountCents           Int
+  paidMarkedByFromAt    DateTime?
+  receivedMarkedByToAt  DateTime?
+  finalizedAt           DateTime?
+  welchFlaggedAt        DateTime?
+  createdAt             DateTime  @default(now())
+
+  @@index([wagerId])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+model Dispute {
+  id        String   @id @default(cuid())
+  wagerId   String
+  wager     Wager    @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([wagerId])
+}
+
+model JoinRequest {
+  id        String            @id @default(cuid())
+  wagerId   String
+  wager     Wager             @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User              @relation(fields: [userId], references: [id])
+  status    JoinRequestStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+  decidedAt DateTime?
+
+  @@unique([wagerId, userId])
+  @@index([wagerId, status])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  wagerId     String
+  wager       Wager    @relation(fields: [wagerId], references: [id], onDelete: Cascade)
+  reporterId  String?
+  reporter    User?    @relation("ReportReporter", fields: [reporterId], references: [id])
+  reason      String
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([resolved, createdAt])
+}
+
+enum WagerMode {
+  PARIMUTUEL
+  EQUAL_SPLIT
+}
+
+enum CloseType {
+  TIMED
+  MANUAL
+}
+
+enum AccessMode {
+  OPEN
+  APPROVAL_REQUIRED
+}
+
+enum WagerStatus {
+  OPEN
+  CLOSED
+  AWAITING_RESOLUTION
+  RESOLVED
+  VOID
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

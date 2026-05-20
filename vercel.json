@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/close-timed",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/finalize-payouts",
+      "schedule": "17 * * * *"
+    },
+    {
+      "path": "/api/cron/welch-flag",
+      "schedule": "23 7 * * *"
+    },
+    {
+      "path": "/api/cron/auto-void",
+      "schedule": "37 7 * * *"
+    }
+  ]
+}
